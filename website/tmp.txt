@@ -1,0 +1,224 @@
+
+package user_templates
+
+import "github.com/w1png/htmx-template/templates/scripts"
+import "github.com/w1png/htmx-template/templates/components"
+import "github.com/w1png/htmx-template/utils"
+import "github.com/w1png/htmx-template/models"
+import "fmt"
+
+script initBackButton(path string) {
+tg.BackButton.show();
+tg.BackButton.onClick(() => {
+htmx.ajax('GET', path, {target:'body', swap:'outerHTML'})
+})
+}
+
+templ readyScript() {
+<script>
+  tg.ready();
+  tg.expand();
+</script>
+}
+
+templ authScript() {
+<script>
+  var tg = window.Telegram.WebApp;
+  document.cookie = "token=" + tg.initData;
+</script>
+}
+
+templ adminScript() {
+if user := utils.GetUserFromContext(ctx); user != nil {
+<script>
+  tg.MainButton.setParams({
+    text: "Админ панель",
+  });
+  tg.onEvent('mainButtonClicked', () => htmx.ajax('GET', "/api/admin", {target: 'body', swap: 'outerHTML'}));
+  tg.MainButton.show();
+</script>
+}
+}
+
+templ indexPage(regions []*models.Region) {
+@authScript()
+@adminScript()
+@readyScript()
+<script>
+  tg.BackButton.hide();
+</script>
+<div class="w-screen grid grid-cols-2 gap-2 p-4">
+  for _, region := range regions {
+  <button hx-target="body" hx-swap="innerHTML" hx-get={ fmt.Sprintf("/api/region/%d", region.ID) } class="submit">
+    { region.Name }
+  </button>
+  }
+</div>
+}
+
+templ Index(regions []*models.Region) {
+@Base("Главная") {
+@indexPage(regions)
+}
+}
+
+templ IndexApi(regions []*models.Region) {
+@scripts.SetTitle("Главная")
+@Navbar()
+@indexPage(regions)
+}
+
+templ RegionPage(region *models.Region) {
+@authScript()
+@adminScript()
+<div class="flex flex-col gap-4 w-screen p-4">
+  <h1 class="text-3xl font-bold text-[var(--tg-theme-accent-text-color)]">{ region.Name }</h1>
+  <hr />
+  <div class="grid grid-cols-2 gap-2 w-full">
+    for _, adress := range region.Adresses {
+    <a class="submit" href={ }>
+      { adress.Name }
+    </a>
+    }
+  </div>
+</div>
+@initBackButton("/api/index")
+}
+
+templ StreetPage(i int) {
+@authScript()
+@adminScript()
+<form class="flex flex-col gap-4 w-screen p-4">
+  <h1 class="text-3xl font-bold text-[var(--tg-theme-accent-text-color)]">{ fmt.Sprintf("Улица %d", i) }</h1>
+  <hr />
+  <label class="submit">
+    <span id="upload-label">Загрузить фото</span>
+    <input type="file" multiple accept="image/*" />
+  </label>
+  <button type="button" class="submit"
+    @click="window.Telegram.WebApp.showAlert('Фотографии отправлены', window.Telegram.WebApp.close())">
+    Отправить
+  </button>
+</form>
+@initBackButton("/api/region/0")
+}
+
+templ AdminPanel() {
+@initBackButton("/api/index")
+<div class="h-screen w-screen flex flex-col gap-8 justify-center items-center" hx-boost="true" hx-swap="outerHTML"
+  hx-target="body">
+  <a class="submit w-1/2" href="/api/admins">Администраторы</a>
+  <a class="submit w-1/2" href="/api/regions">Округи</a>
+</div>
+}
+
+templ AddAdminModal() {
+<span x-data="{ open: false }" hx-ext="response-targets">
+  @components.Modal("open") {
+  <form class="w-[95vw] h-fit flex flex-col gap-6 rounded-xl p-4 bg-[var(--tg-theme-secondary-bg-color)]"
+    x-init="open = true" hx-post="/api/admins" hx-target="#admin-list" hx-target-error="#add-error"
+    hx-swap="afterbegin">
+    <div class="flex flex-col gap-4">
+      <h1 class="text-3xl font-bold text-[var(--tg-theme-accent-text-color)]">Добавить администратора</h1>
+      <hr />
+    </div>
+    <div class="flex flex-col gap-6">
+      @components.LabeledInput("ID администратора", templ.Attributes{"name": "telegram_id", "type": "number",
+      "required": "true"}, "")
+      <div class="flex flex-row gap-2 w-full">
+        <p class="error" id="add-error"></p>
+        <button class="submit w-1/2" x-on:htmx:after-swap.window="open = false">Добавить</button>
+        <button class="delete w-1/2" type="button" @click="open = false">Отмена</button>
+      </div>
+    </div>
+  </form>
+  }
+</span>
+}
+
+templ Admin(admin *models.User) {
+<div class="flex flex-col bg-[var(--tg-theme-secondary-bg-color)] p-4 rounded-xl gap-4" id={ fmt.Sprintf("admin-%d",
+  admin.TelegramId) }>
+  <div class="flex flex-col gap-2">
+    <a class="url" href={ templ.SafeURL(fmt.Sprintf("https://t.me/%s", admin.Username)) }>
+      { fmt.Sprintf("@%s",
+      admin.Username) }
+    </a>
+    <p>{ fmt.Sprintf("Id: %d", admin.TelegramId) }</p>
+  </div>
+  <div class="flex flex-row gap-2">
+    <button class="delete w-full h-fit" @click={ fmt.Sprintf("deleteAdmin('%d', '%s' )", admin.TelegramId,
+      admin.Username) }>
+      Удалить
+    </button>
+  </div>
+</div>
+}
+
+templ Admins(admins []*models.User) {
+@initBackButton("/api/admin")
+<script>
+  function deleteAdmin(id, username) {
+    tg.showPopup({
+      message: `Вы уверены что хотите удалить администратора @${username}?`,
+      buttons: [
+        {
+          type: "destructive",
+          text: "Удалить",
+          id: "1",
+        },
+        {
+          type: "cancel",
+          id: "2",
+        },
+      ],
+    }, (a) => {
+      if (a != "1") return;
+
+      htmx.ajax('DELETE', `/api/admins/${id}`, {target: `#admin-${id}`, swap: 'outerHTML'}).then(() => {
+        tg.HapticFeedback.selectionChanged()
+      })
+    })
+  }
+</script>
+<div class="p-4 flex flex-col gap-4">
+  <span id="add-admin-modal-target"></span>
+  <button class="submit" hx-target="#add-admin-modal-target" hx-get="/api/admins/add">Добавить администратора</button>
+  <hr />
+  <div class="grid grid-cols-2 gap-2" id="admin-list">
+    for _, admin := range admins {
+    @Admin(admin)
+    }
+  </div>
+</div>
+}
+
+templ AdminRegion(region *models.Region) {
+<div class="flex flex-col bg-[var(--tg-theme-secondary-bg-color)] p-4 rounded-xl gap-4" id={ fmt.Sprintf("region-%d",
+  region.ID) }>
+  <div class="flex flex-col gap-2">
+    <p>{ region.Name }</p>
+  </div>
+  <div class="flex flex-row gap-2">
+    <button class="submit w-1/2 h-fit" hx-target="body" hx-swap="innerHTML" hx-get={ fmt.Sprintf("/api/regions/%d",
+      region.ID) }>
+      Редактировать
+    </button>
+    <button class="delete w-1/2 h-fit" @click={ fmt.Sprintf("deleteRegion('%d', '%s' )", region.ID, region.Name) }>
+      Удалить
+    </button>
+  </div>
+</div>
+}
+
+templ AdminAdress(adress *models.Adress) {
+<div class="flex flex-col bg-[var(--tg-theme-secondary-bg-color)] p-4 rounded-xl gap-4" id={ fmt.Sprintf("adress-%d",
+  adress.ID) }>
+  <div class="flex flex-col gap-2">
+    <p>{ adress.Name }</p>
+  </div>
+  <button class="delete" @click={ fmt.Sprintf("deleteAdress('%d', '%s' )", adress.ID, adress.Name) }>
+    Удалить
+  </button>
+</div>
+}

@@ -1,0 +1,10 @@
+package user_templates
+
+import "github.com/w1png/htmx-template/templates"
+
+templ Base(title string) {
+@templates.Base(title) {
+@Navbar()
+{ children... }
+}
+}
