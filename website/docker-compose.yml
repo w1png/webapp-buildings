@@ -1,0 +1,10 @@
+version: "3"
+services:
+  website:
+    build: .
+    ports:
+      - 3355:8080
+    volumes:
+      - ./data.db:/app/data.db
+    restart: always
+

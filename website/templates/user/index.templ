@@ -27,7 +27,7 @@ templ authScript() {
 </script>
 }
 
-templ adminScript() {
+templ AdminScript() {
 if user := utils.GetUserFromContext(ctx); user != nil {
 <script>
   tg.MainButton.setParams({
@@ -41,7 +41,13 @@ if user := utils.GetUserFromContext(ctx); user != nil {
 
 templ indexPage(regions []*models.Region) {
 @authScript()
-@adminScript()
+<span
+hx-target="this"
+hx-swap="outerHTML"
+hx-get="/api/admin_script"
+hx-trigger="load"
+>
+</span>
 @readyScript()
 <script>
   tg.BackButton.hide();
@@ -80,7 +86,7 @@ templ RegionPage(region *models.Region) {
 
 templ regionPage(region *models.Region) {
 @authScript()
-@adminScript()
+@AdminScript()
 @readyScript()
 <div class="flex flex-col gap-4 w-screen p-4">
   <h1 class="text-3xl font-bold text-[var(--tg-theme-accent-text-color)]">{ region.Name }</h1>
@@ -139,7 +145,7 @@ templ AdressApiPage(adress *models.Adress) {
 templ adressPage(adress *models.Adress) {
 <div class="w-screen flex flex-col p-4 gap-4">
   @authScript()
-  @adminScript()
+  @AdminScript()
   @initBackButton(fmt.Sprintf("/api/region/%d", adress.RegionId))
   <span id="adress-image-target"></span>
   <h1 class="text-3xl font-bold text-[var(--tg-theme-accent-text-color)]">

@@ -82,11 +82,13 @@ async def region_callback(callback: types.CallbackQuery) -> None:
     for adress in data["Adresses"]:
         adresses.append(Adress(id=adress["ID"], name=adress["Name"]))
 
-    markup = types.InlineKeyboardMarkup(inline_keyboard=[
+    buttons = [
         [
             types.InlineKeyboardButton(text=adress.name, callback_data=f"adress_{adress.id}"),
         ] for adress in adresses
-    ])
+    ]
+    buttons.append([types.InlineKeyboardButton(text="Назад", callback_data="start")])
+    markup = types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
     text = f"Округ: {data['Name']}\nВыберите адрес:"
 
@@ -95,6 +97,10 @@ async def region_callback(callback: types.CallbackQuery) -> None:
     except:
         await bot.send_message(callback.message.chat.id, text, reply_markup=markup)
 
+
+async def start_callback(callback: types.CallbackQuery) -> None:
+    await bot.delete_message(callback.message.chat.id, callback.message.message_id)
+    await start_handler(callback.message)
 
 class AdressImagesState(StatesGroup):
     message_id = State()
@@ -107,10 +113,18 @@ async def adress_callback(callback: types.CallbackQuery, state: FSMContext) -> N
     await state.set_state(AdressImagesState.images)
     await state.update_data(adress_id=id)
 
+    markup = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="Отмена", callback_data="cancel_adress_images"),
+            ]
+        ]
+    )
+
     try:
-        await bot.edit_message_text(text="Отправьте фотографии", chat_id=callback.message.chat.id, message_id=callback.message.message_id)
+        await bot.edit_message_text(text="Отправьте фотографии", chat_id=callback.message.chat.id, message_id=callback.message.message_id, reply_markup=markup)
     except:
-        await callback.message.answer("Отправьте фотографии")
+        await callback.message.answer("Отправьте фотографии", reply_markup=markup)
 
 async def adress_images_upload(message: types.Message, state: FSMContext) -> None:
     # if message has Photos
@@ -140,7 +154,7 @@ async def adress_images_upload(message: types.Message, state: FSMContext) -> Non
                 types.InlineKeyboardButton(text="Отправить", callback_data="send_adress_images"),
             ]
         ]
-            )
+    )
 
     await bot.delete_message(message.chat.id, message.message_id)
 
@@ -161,6 +175,8 @@ async def adress_images_cancel(callback: types.CallbackQuery, state: FSMContext)
 
     await state.clear()
     await bot.send_message(callback.message.chat.id, "Отменено")
+    await state.clear()
+    await start_handler(callback.message)
 
 async def adress_images_send(callback: types.CallbackQuery, state: FSMContext) -> None:
     # download all the images to binaryio and upload them as multipart form to POST http://localhost:3355/api/images
@@ -230,8 +246,8 @@ async def start_handler(message: types.Message) -> None:
     if not data:
         return
 
-    if message.from_user.id in typing.cast(typing.List[int], data):
-        web_app = types.WebAppInfo(url="https://telegram.w1png.ru")
+    if message.chat.id in typing.cast(typing.List[int], data):
+        web_app = types.WebAppInfo(url="https://building-telegram.w1png.ru")
         await bot.set_chat_menu_button(message.chat.id, menu_button=types.MenuButtonWebApp(text="Админ панель", web_app=web_app))
     else:
         await bot.set_chat_menu_button(message.chat.id, menu_button=types.MenuButtonDefault())
@@ -258,6 +274,7 @@ async def start_handler(message: types.Message) -> None:
             types.InlineKeyboardButton(text=region.name, callback_data=f"region_{region.id}"),
         ] for region in regions
     ])
+    
 
     await bot.send_message(message.chat.id, "Выберите округ:", reply_markup=markup)
 
@@ -266,6 +283,7 @@ async def main() -> None:
 
     dp.message.register(start_handler, filters.CommandStart())
     dp.callback_query.register(region_callback, StartsWithFilter("region_"))
+    dp.callback_query.register(start_callback, EqualsFilter("start"))
 
     dp.callback_query.register(adress_callback, StartsWithFilter("adress_"))
     dp.message.register(adress_images_upload, AdressImagesState.images)

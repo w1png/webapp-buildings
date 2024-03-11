@@ -34,6 +34,8 @@ func GatherIndexHandlers(user_page_group *echo.Echo, user_api_group, admin_page_
 	user_api_group.GET("/adress/:id/download", DownloadAdressHandler)
 	user_api_group.GET("/region/:id/download", DownloadRegionHandler)
 
+	user_api_group.GET("/admin_script", AdminScriptHandler)
+
 	user_api_group.GET("/admin", AdminPanelHandler)
 
 	user_api_group.GET("/admins", AdminsIndex)
@@ -52,6 +54,10 @@ func GatherIndexHandlers(user_page_group *echo.Echo, user_api_group, admin_page_
 	user_api_group.GET("/json/regions", GetRegionsHandler)
 	user_api_group.GET("/json/regions/:id", GetRegionHandler)
 	user_api_group.GET("/json/adresses/:id", GetAdressHandler)
+}
+
+func AdminScriptHandler(c echo.Context) error {
+	return utils.Render(c, user_templates.AdminScript())
 }
 
 func GetAdressHandler(c echo.Context) error {
@@ -451,7 +457,7 @@ func DeleteAdressHandler(c echo.Context) error {
 }
 
 func PostAdressImagesHandler(c echo.Context) error {
-	if err := c.Request().ParseMultipartForm(int64(50 * 1024 * 1024)); err != nil {
+	if err := c.Request().ParseMultipartForm(int64(50 * 1024 * 1024 * 1024)); err != nil {
 		log.Error(err)
 		return c.String(http.StatusBadRequest, "Неверный запрос")
 	}
