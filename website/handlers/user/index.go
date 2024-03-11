@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/h2non/bimg"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 	"github.com/w1png/htmx-template/models"
@@ -127,29 +126,48 @@ func DownloadAdressHandler(c echo.Context) error {
 
 	folder_name := fmt.Sprintf("%s_%s", strings.ReplaceAll(region_name, " ", "_"), strings.ReplaceAll(adress.Name, " ", "_"))
 
-	for i, image := range adress.Images {
-		f, err := os.Open(image)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
+	wg := sync.WaitGroup{}
 
+	files := make(chan []byte, len(adress.Images))
+
+	for i, image := range adress.Images {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			f, err := os.Open(image)
+			if err != nil {
+				return
+			}
+			defer f.Close()
+
+			content, err := io.ReadAll(f)
+			if err != nil {
+				return
+			}
+
+			files <- content
+
+			fmt.Printf("processed image %d\n", i)
+			c.NoContent(http.StatusProcessing)
+		}()
+	}
+
+	wg.Wait()
+
+	close(files)
+
+	i := -1
+	for file := range files {
+		fmt.Printf("Writing file %d\n", i)
+		i++
 		archive_file, err := z.Create(folder_name + "/" + folder_name + "/" + strconv.Itoa(i) + ".png")
 		if err != nil {
 			return err
 		}
 
-		content, err := io.ReadAll(f)
-		if err != nil {
-			return err
-		}
-
-		png, err := bimg.NewImage(content).Convert(bimg.PNG)
-		if err != nil {
-			return err
-		}
-
-		if _, err := archive_file.Write(png); err != nil {
+		if _, err := archive_file.Write(file); err != nil {
 			return err
 		}
 	}
@@ -158,6 +176,7 @@ func DownloadAdressHandler(c echo.Context) error {
 		log.Error(err)
 	}
 
+	c.Response().Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.zip", folder_name))
 	return c.Blob(http.StatusOK, "application/zip", buf.Bytes())
 }
@@ -540,34 +559,55 @@ func DownloadRegionHandler(c echo.Context) error {
 
 	folder_name := strings.ReplaceAll(region.Name, " ", "_")
 
+	images_count := 0
 	for _, adress := range region.Adresses {
-		adress_folder_name := strings.ReplaceAll(adress.Name, " ", "_")
+		images_count += len(adress.Images)
+	}
 
+	files := make(chan []byte, images_count)
+	wg := sync.WaitGroup{}
+
+	for _, adress := range region.Adresses {
 		for i, image := range adress.Images {
-			f, err := os.Open(image)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
+			wg.Add(1)
 
-			archive_file, err := z.Create(folder_name + "/" + folder_name + "/" + adress_folder_name + "/" + strconv.Itoa(i) + ".png")
-			if err != nil {
-				return err
-			}
+			go func() {
+				defer wg.Done()
 
-			content, err := io.ReadAll(f)
-			if err != nil {
-				return err
-			}
+				f, err := os.Open(image)
+				if err != nil {
+					return
+				}
+				defer f.Close()
 
-			png, err := bimg.NewImage(content).Convert(bimg.PNG)
-			if err != nil {
-				return err
-			}
+				content, err := io.ReadAll(f)
+				if err != nil {
+					return
+				}
 
-			if _, err := archive_file.Write(png); err != nil {
-				return err
-			}
+				files <- content
+
+				fmt.Printf("processed image %d\n", i)
+				c.NoContent(http.StatusProcessing)
+			}()
+		}
+	}
+
+	wg.Wait()
+
+	close(files)
+
+	i := -1
+	for file := range files {
+		fmt.Printf("Writing file %d\n", i)
+		i++
+		archive_file, err := z.Create(folder_name + "/" + folder_name + "/" + strconv.Itoa(i) + ".png")
+		if err != nil {
+			return err
+		}
+
+		if _, err := archive_file.Write(file); err != nil {
+			return err
 		}
 	}
 

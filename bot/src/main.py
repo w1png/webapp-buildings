@@ -5,7 +5,6 @@ import io
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.methods import answer_inline_query
 
 import requests
 import asyncio
@@ -69,7 +68,7 @@ class Region:
         self.adresses = adresses
 
 async def region_callback(callback: types.CallbackQuery) -> None:
-    resp = requests.get(f"http://localhost:3355/api/json/regions/{callback.data.split('_')[1]}")
+    resp = requests.get(f"http://localhost:3000/api/json/regions/{callback.data.split('_')[1]}")
     if resp.status_code != 200:
         return
 
@@ -179,7 +178,7 @@ async def adress_images_cancel(callback: types.CallbackQuery, state: FSMContext)
     await start_handler(callback.message)
 
 async def adress_images_send(callback: types.CallbackQuery, state: FSMContext) -> None:
-    # download all the images to binaryio and upload them as multipart form to POST http://localhost:3355/api/images
+    # download all the images to binaryio and upload them as multipart form to POST http://localhost:3000/api/images
     data = await state.get_data()
     if "images" not in data:
         return
@@ -187,25 +186,39 @@ async def adress_images_send(callback: types.CallbackQuery, state: FSMContext) -
     images = data["images"]
     adress_id = data["adress_id"]
 
-    file_bytes: typing.List[io.BytesIO] = []
-    for image in images:
-        image_bytes = io.BytesIO()
-        await bot.download(file=image, destination=image_bytes)
+    batches_sent = 0
 
-        file_bytes.append(image_bytes)
+    # split images into batches of 25 per
+    image_batches = []
 
-    files = []
+    for i in range(0, len(images), 25):
+        image_batches.append(images[i:i+25])
 
-    for byte in file_bytes:
-        files.append(("images", (f"image_{len(files)}", byte, "image/jpeg")))
+    async def send_batch(batch: typing.List[str], i: int) -> None:
+        print(f"sending number {i} batch of {len(batch)} images")
+        files = []
 
-    resp = requests.post(f"http://localhost:3355/api/adress/{adress_id}/images", files=files)
-    if resp.status_code != 200:
-        return
+        for image in batch:
+            image_bytes = io.BytesIO()
+            await bot.download(file=image, destination=image_bytes)
 
+            files.append(("images", (f"image_{len(files)}", image_bytes, "image/jpeg")))
 
+        resp = requests.post(f"http://localhost:3000/api/adress/{adress_id}/images", files=files)
+        if resp.status_code != 200:
+            return
 
-    resp = requests.get(f"http://localhost:3355/api/json/adresses/{adress_id}")
+        print(f"sent batch number {i}")
+
+    tasks = []
+
+    for i, batch in enumerate(image_batches):
+        tasks.append(send_batch(batch, i))
+        batches_sent += 1
+
+    await asyncio.gather(*tasks)
+
+    resp = requests.get(f"http://localhost:3000/api/json/adresses/{adress_id}")
     if resp.status_code != 200:
         return
 
@@ -215,7 +228,7 @@ async def adress_images_send(callback: types.CallbackQuery, state: FSMContext) -
 
     adress_name = data["Name"]
 
-    resp = requests.get(f"http://localhost:3355/api/json/regions/{data['RegionId']}")
+    resp = requests.get(f"http://localhost:3000/api/json/regions/{data['RegionId']}")
     if resp.status_code != 200:
         return
 
@@ -235,10 +248,10 @@ async def adress_images_send(callback: types.CallbackQuery, state: FSMContext) -
 
 
 async def start_handler(message: types.Message) -> None:
-    # http localhost:3355/api/json/admin_telegram_ids
+    # http localhost:3000/api/json/admin_telegram_ids
     # returns list of ids that are int
 
-    resp = requests.get("http://localhost:3355/api/json/admin_telegram_ids")
+    resp = requests.get("http://localhost:3000/api/json/admin_telegram_ids")
     if resp.status_code != 200:
         return
 
@@ -247,12 +260,13 @@ async def start_handler(message: types.Message) -> None:
         return
 
     if message.chat.id in typing.cast(typing.List[int], data):
-        web_app = types.WebAppInfo(url="https://building-telegram.w1png.ru")
+        # web_app = types.WebAppInfo(url="https://building-telegram.w1png.ru")
+        web_app = types.WebAppInfo(url="https://telegram.w1png.ru")
         await bot.set_chat_menu_button(message.chat.id, menu_button=types.MenuButtonWebApp(text="Админ панель", web_app=web_app))
     else:
         await bot.set_chat_menu_button(message.chat.id, menu_button=types.MenuButtonDefault())
 
-    resp = requests.get("http://localhost:3355/api/json/regions")
+    resp = requests.get("http://localhost:3000/api/json/regions")
     if resp.status_code != 200:
         return
 

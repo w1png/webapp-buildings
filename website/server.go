@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
@@ -18,6 +19,9 @@ func NewHTTPServer() *HTTPServer {
 	server := &HTTPServer{
 		echo: echo.New(),
 	}
+
+	server.echo.Server.ReadTimeout = 1 * time.Hour
+	server.echo.Server.WriteTimeout = 1 * time.Hour
 
 	user_page_group := server.echo
 	server.echo.Use(middleware.UseHost)

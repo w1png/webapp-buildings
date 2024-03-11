@@ -14,7 +14,7 @@ func ProcessImage(file io.Reader) ([]byte, error) {
 		return []byte{}, err
 	}
 
-	webp, err := bimg.NewImage(buffer).Convert(bimg.WEBP)
+	webp, err := bimg.NewImage(buffer).Convert(bimg.PNG)
 	if err != nil {
 		return []byte{}, err
 	}
