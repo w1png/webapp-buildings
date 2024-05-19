@@ -18,7 +18,7 @@ export const userRouter = createTRPCRouter({
       role: userRoleEnumSchema,
     }))
     .mutation(async ({ ctx, input }) => {
-      ctx.db.update(users).set({
+      await ctx.db.update(users).set({
         role: input.role
       })
         .where(eq(users.id, input.id))

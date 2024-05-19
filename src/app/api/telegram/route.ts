@@ -4,7 +4,7 @@ import { Context, Telegraf, session } from 'telegraf'
 import { db } from "~/server/db"
 import { message } from "telegraf/filters";
 import { eq } from "drizzle-orm";
-import { addresses } from "~/server/db/schema";
+import { AddressType, addresses, regions } from "~/server/db/schema";
 import fs from "fs";
 import axios from "axios";
 import { createId } from "@paralleldrive/cuid2";
@@ -16,7 +16,6 @@ interface Session {
   lastMessageId?: number;
   photos?: string[];
   isDownloading?: boolean;
-  type: "assembly" | "disassembly";
 }
 
 interface CustomContext extends Context {
@@ -49,7 +48,7 @@ bot.start(async (ctx) => {
       }
     })
   }
-  ctx.reply("Список регионов:", {
+  ctx.reply("Список округов:", {
     reply_markup: {
       inline_keyboard: regions.map((r) => [
         {
@@ -62,6 +61,7 @@ bot.start(async (ctx) => {
 })
 
 bot.on(message("photo"), async (ctx) => {
+  console.log(ctx.session)
   if (!ctx.session) return;
 
   let imageId = ctx.message.photo.pop()?.file_id;
@@ -69,6 +69,7 @@ bot.on(message("photo"), async (ctx) => {
     await ctx.telegram.getFileLink(imageId).then(async (link) => {
       ctx.session?.photos?.push(link.href)
 
+      ctx.deleteMessage();
       ctx.deleteMessage(ctx.session?.lastMessageId);
       const m = await ctx.reply(`Загружено ${ctx.session?.photos?.length} фото`, {
         reply_markup: {
@@ -104,7 +105,8 @@ bot.on("callback_query", async (ctx) => {
       const address = await db.query.addresses.findFirst({
         where: eq(addresses.id, ctx.session.addressId),
         columns: {
-          name: true
+          name: true,
+          type: true
         },
         with: {
           region: {
@@ -120,7 +122,7 @@ bot.on("callback_query", async (ctx) => {
         return;
       }
 
-      const path = `./images/${address.region.name}/${address.name}/${ctx.session.type === "assembly" ? "Монтаж" : "Демонтаж"}`
+      const path = `./images/${address.region.name}/${address.type === "ASSEMBLY" ? "Монтаж" : "Демонтаж"}/${address.name}`
       if (!fs.existsSync(path)) {
         fs.mkdirSync(path, { recursive: true })
       }
@@ -153,7 +155,7 @@ bot.on("callback_query", async (ctx) => {
       ctx.state.addressId = undefined
 
       ctx.deleteMessage();
-      ctx.reply("Список регионов:", {
+      ctx.reply("Список округов:", {
         reply_markup: {
           inline_keyboard: regions.map((r) => [
             {
@@ -165,15 +167,52 @@ bot.on("callback_query", async (ctx) => {
       })
       break;
     }
+    case "regionASSEMBLY":
+    case "regionDISASSEMBLY":
+      {
+        const type: AddressType = command === "regionASSEMBLY" ? "ASSEMBLY" : "DISASSEMBLY"
+        console.log(type)
+
+        const region = await db.query.regions.findFirst({
+          where: eq(regions.id, data ?? ""),
+          columns: {
+            name: true,
+            id: true,
+          },
+          with: {
+            addresses: {
+              where: eq(addresses.type, type)
+            }
+          }
+        })
+
+        if (!region) {
+          ctx.reply("Округ не найден")
+          return
+        }
+
+        ctx.deleteMessage();
+        ctx.reply(`${region?.name} (${type === "ASSEMBLY" ? "Монтаж" : "Демонтаж"})`, {
+          reply_markup: {
+            inline_keyboard: [
+              ...region.addresses.map((a) => [{ text: a.name, callback_data: `address:${a.id}` }]),
+              [{ text: "Назад", callback_data: `region:${region.id}` }]
+            ]
+          }
+        })
+        break;
+      }
     case "region": {
       const region = await db.query.regions.findFirst({
-        with: {
-          addresses: true
+        where: eq(regions.id, data ?? ""),
+        columns: {
+          name: true,
+          id: true,
         }
-      })
+      });
 
       if (!region) {
-        ctx.reply("Не удалось найти регион")
+        ctx.reply("Не удалось найти округ")
         return;
       }
 
@@ -181,12 +220,14 @@ bot.on("callback_query", async (ctx) => {
       ctx.reply(region.name, {
         reply_markup: {
           inline_keyboard: [
-            ...region.addresses.map((a) => [
-              {
-                text: a.name,
-                callback_data: `address:${a.id}`
-              }
-            ]),
+            [{
+              text: "Монтаж",
+              callback_data: `regionASSEMBLY:${region.id}`
+            }],
+            [{
+              text: "Демонтаж",
+              callback_data: `regionDISASSEMBLY:${region.id}`
+            }],
             [{
               text: "Назад",
               callback_data: `start`
@@ -198,54 +239,28 @@ bot.on("callback_query", async (ctx) => {
       break;
     }
     case "address": {
-      ctx.deleteMessage();
-
       const address = await db.query.addresses.findFirst({
         where: eq(addresses.id, data ?? ""),
-        with: {
-          region: {
-            columns: {
-              id: true
-            }
-          }
+        columns: {
+          regionId: true,
+          type: true,
+          id: true,
         }
       })
 
       if (!address) {
         ctx.reply("Адрес не найден")
-        return;
+        return
       }
 
-      // Монтаж/демонтаж
-      ctx.reply("Выберите тип", {
-        reply_markup: {
-          inline_keyboard: [
-            [{
-              text: "Монтаж",
-              callback_data: `addressAssembly:${data}`
-            }, {
-              text: "Демонтаж",
-              callback_data: `addressDisassembly:${data}`
-            }],
-            [{
-              text: "Назад",
-              callback_data: `region:${address.region.id}`
-            }]
-          ]
-        }
-      })
-      break;
-    }
-    case "addressDisassembly":
-    case "addressAssembly": {
       ctx.session ??= {
         addressId: "",
         lastMessageId: 0,
         photos: [],
         isDownloading: false,
-        type: command === "addressDisassembly" ? "disassembly" : "assembly"
       }
-      ctx.session.addressId = data;
+      ctx.session.addressId = address.id;
+
 
       ctx.deleteMessage();
       const m = await ctx.reply("Отправьте фотографии чтобы продолжить\nЗагружено 0 фото", {
@@ -253,7 +268,7 @@ bot.on("callback_query", async (ctx) => {
           inline_keyboard: [
             [{
               text: "Отмена",
-              callback_data: `address:${data}`
+              callback_data: `region${address.type}:${address.regionId}`
             }]
           ]
         }

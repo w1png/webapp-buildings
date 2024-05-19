@@ -31,7 +31,7 @@ export default function HomePage() {
 
       <HomeButton
         href="/regions"
-        text="Регионы"
+        text="Округи"
       />
     </div>
   );

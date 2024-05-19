@@ -11,7 +11,7 @@ export default async function Regions() {
     <div className="p-6 space-y-4">
       <BackButton href="/" />
       <p className="text-2xl font-bold">
-        Регионы
+        Округи
       </p>
       <CreateRegion />
       <div className="flex flex-col gap-2 w-full">

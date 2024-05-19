@@ -27,6 +27,7 @@ export default function UserProvider({
 
   useEffect(() => {
     if (viewport) {
+      viewport.expand();
       return bindViewportCSSVars(viewport);
     }
   }, [viewport]);

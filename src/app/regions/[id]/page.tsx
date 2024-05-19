@@ -1,50 +1,38 @@
-import BackButton from "~/components/backButton"
-import NotFoundPage from "~/not-found"
-import { api } from "~/trpc/server"
-import CreateAddress from "./create_address"
-import DeleteRegion from "./delete"
-import { Separator } from "~/components/ui/separator"
-import DeleteAddress from "./delete_address"
-import Link from "next/link"
-import { Button } from "~/components/ui/button"
-import { Download } from "lucide-react"
-import DownloadRegion from "./download"
+import Link from "next/link";
+import BackButton from "~/components/backButton";
+import { Button } from "~/components/ui/button";
+import NotFoundPage from "~/not-found";
+import { api } from "~/trpc/server";
 
-export default async function RegionPage({
+export default async function Region({
   params
 }: {
   params: {
-    id: string
+    id: string;
   }
 }) {
-  const region = await api.region.getOne({ id: params.id })
+  const region = await api.region.getOne({
+    id: params.id,
+    type: "ASSEMBLY"
+  })
 
   if (!region) {
     return <NotFoundPage />
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="h-screen w-screen flex flex-col p-6">
       <BackButton href="/regions" />
-      <p className="text-2xl font-bold">
-        {region.name}
-      </p>
-      <div className="flex flex-row gap-2">
-        <DeleteRegion region={region} />
-        <DownloadRegion regionId={region.id} />
-      </div>
-      <Separator />
-      <CreateAddress regionId={region.id} />
-      <div className="flex flex-col gap-2">
-        {region.addresses.map((a) => (
-          <div className="space-y-4" key={a.id}>
-            <div className="flex flex-row gap-2 justify-between items-center">
-              <p>{a.name}</p>
-              <DeleteAddress addressId={a.id} regionId={region.id} />
-            </div>
-          </div>
-        ))}
+      <p className="text-2xl font-bold">{region.name}</p>
+      <div className="flex flex-col gap-2 grow justify-center items-center">
+        <Link href={`/regions/${region.id}/assembly`}>
+          <Button>Монтаж</Button>
+        </Link>
+        <Link href={`/regions/${region.id}/disassembly`}>
+          <Button>Демонтаж</Button>
+        </Link>
+
       </div>
     </div>
-  )
+  );
 }

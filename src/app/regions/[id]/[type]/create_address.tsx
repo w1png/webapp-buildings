@@ -2,19 +2,23 @@
 
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { useToast } from "~/components/ui/use-toast";
+import { AddressType } from "~/server/db/schema";
 import { api } from "~/trpc/react";
 
 export default function CreateAddress({
-  regionId
+  regionId,
+  type
 }: {
   regionId: string;
+  type: AddressType;
 }) {
   const toast = useToast();
   const router = useRouter();
+
   const createAddressMutation = api.address.create.useMutation({
     onSuccess: () => {
       router.refresh();
@@ -47,7 +51,8 @@ export default function CreateAddress({
 
     createAddressMutation.mutate({
       regionId,
-      name
+      name,
+      type
     })
   }
 

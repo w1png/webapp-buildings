@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { addresses } from "~/server/db/schema";
+import { addressTypeEnumSchema, addresses } from "~/server/db/schema";
 
 export const addressRouter = createTRPCRouter({
   getOne: publicProcedure
@@ -26,6 +26,7 @@ export const addressRouter = createTRPCRouter({
     .input(z.object({
       regionId: z.string(),
       name: z.string(),
+      type: addressTypeEnumSchema,
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.insert(addresses).values(input)

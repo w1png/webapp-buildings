@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { regions } from "~/server/db/schema";
+import { addressTypeEnumSchema, addresses, regions } from "~/server/db/schema";
 
 export const regionRouter = createTRPCRouter({
   create: adminProcedure
@@ -21,12 +21,15 @@ export const regionRouter = createTRPCRouter({
   getOne: publicProcedure
     .input(z.object({
       id: z.string(),
+      type: addressTypeEnumSchema,
     }))
     .query(({ ctx, input }) => {
       return ctx.db.query.regions.findFirst({
         where: eq(regions.id, input.id),
         with: {
-          addresses: true
+          addresses: {
+            where: eq(addresses.type, input.type),
+          }
         }
       })
     }),
